@@ -5,7 +5,7 @@ import { query } from '../database/connection';
 import { loginLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET!;
+const JWT_SECRET = process.env.JWT_SECRET || 'debugging-contest-jwt-secret-change-in-production-32chars';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
 
 // POST /api/auth/login

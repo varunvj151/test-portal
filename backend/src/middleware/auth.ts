@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { query } from '../database/connection';
 
-const JWT_SECRET = process.env.JWT_SECRET!;
+const JWT_SECRET = process.env.JWT_SECRET || 'debugging-contest-jwt-secret-change-in-production-32chars';
 
 export interface AuthRequest extends Request {
   contestantId?: string;

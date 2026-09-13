@@ -48,11 +48,33 @@ app.use(cookieParser());
 app.use(apiLimiter);
 
 // Health checks
-const healthHandler = (_req: express.Request, res: express.Response) => {
+import { query } from './database/connection';
+
+const healthHandler = async (_req: express.Request, res: express.Response) => {
+  let dbStatus = 'disconnected';
+  let dbError: string | null = null;
+  try {
+    const { rows } = await query('SELECT NOW() as now');
+    dbStatus = `connected (${rows[0].now})`;
+  } catch (err: any) {
+    dbError = err.message;
+  }
+
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
+    database: {
+      status: dbStatus,
+      error: dbError,
+      hasUrl: Boolean(process.env.DATABASE_URL),
+    },
+    jwt: {
+      hasSecret: Boolean(process.env.JWT_SECRET),
+    },
+    judge: {
+      url: process.env.JUDGE_URL || process.env.JUDGE0_URL || null,
+    },
   });
 };
 
