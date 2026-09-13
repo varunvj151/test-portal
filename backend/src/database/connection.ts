@@ -23,6 +23,18 @@ if (!rawConnectionString) {
  */
 function sanitizeDatabaseUrl(url: string): string {
   try {
+    // If user provided direct IPv6 db.xxxx.supabase.co, map to IPv4 pooler for serverless platforms like Vercel
+    const supabaseDirectMatch = url.match(/db\.([a-z0-9]+)\.supabase\.co/);
+    if (supabaseDirectMatch) {
+      const projectRef = supabaseDirectMatch[1];
+      url = url
+        .replace(`db.${projectRef}.supabase.co:5432`, `aws-0-ap-northeast-1.pooler.supabase.com:6543`)
+        .replace(`db.${projectRef}.supabase.co`, `aws-0-ap-northeast-1.pooler.supabase.com:6543`);
+      if (!url.includes(`postgres.${projectRef}:`)) {
+        url = url.replace(/postgres:/, `postgres.${projectRef}:`);
+      }
+    }
+
     const protocolMatch = url.match(/^([^:]+):\/\//);
     if (!protocolMatch) return url;
     const protocol = protocolMatch[0];
