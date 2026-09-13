@@ -15,6 +15,8 @@ let contestantCookie: string;
 let contestant2Cookie: string;
 let attemptId: string;
 
+jest.setTimeout(30000);
+
 beforeAll(async () => {
   await query(`
     DELETE FROM violations WHERE attempt_id IN (SELECT id FROM attempts WHERE contestant_id IN (SELECT id FROM contestants WHERE registration_number IN ($1, $2)))

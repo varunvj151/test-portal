@@ -397,7 +397,7 @@ export default function ContestPage() {
   // ============================================================
 
   const triggerAutosave = useCallback(
-    (questionId: string, code: string) => {
+    (questionId: string, code: string, retryCount = 0) => {
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
       autosaveTimer.current = setTimeout(async () => {
         if (isSubmitted.current || !attemptId) return;
@@ -411,11 +411,33 @@ export default function ContestPage() {
           }));
         } catch {
           setSaveStatus('error');
+          // Retry failed save up to 2 times with backoff
+          if (retryCount < 2 && !isSubmitted.current) {
+            setTimeout(() => {
+              triggerAutosave(questionId, code, retryCount + 1);
+            }, 2000);
+          }
         }
-      }, 1500); // 1.5s debounce
+      }, retryCount > 0 ? 0 : 1500); // 1.5s debounce, immediate on retry
     },
     [attemptId]
   );
+
+  // Periodic autosave every 60 seconds
+  useEffect(() => {
+    const periodicTimer = setInterval(() => {
+      const q = questions[currentIndex];
+      if (q && codes[q.id] && !isSubmitted.current && attemptId) {
+        const isModified = codes[q.id].trim() !== (q.starter_code || '').trim();
+        const isChecked = answerStatuses[q.id] === 'CHECKED';
+        if (isModified || isChecked) {
+          answerApi.saveCode(q.id, attemptId, codes[q.id]).catch(() => {});
+        }
+      }
+    }, 60000);
+
+    return () => clearInterval(periodicTimer);
+  }, [questions, currentIndex, codes, answerStatuses, attemptId]);
 
   // Save code for current question on question change
   const handleQuestionChange = async (newIndex: number) => {

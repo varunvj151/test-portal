@@ -6,8 +6,8 @@ import { evaluateCode } from '../services/judgeService';
 
 const router = Router();
 
-// PUT /api/contest/questions/:id/code — save code (autosave)
-router.put('/:id/code', requireContestant, async (req: AuthRequest, res: Response) => {
+// Handler for saving code (autosave)
+const saveCodeHandler = async (req: AuthRequest, res: Response) => {
   try {
     const { attempt_id, code } = req.body;
     const questionId = req.params.id;
@@ -52,10 +52,17 @@ router.put('/:id/code', requireContestant, async (req: AuthRequest, res: Respons
 
     return res.json({ message: 'Code saved', saved_at: new Date().toISOString() });
   } catch (err) {
-    console.error('PUT /questions/:id/code error:', err);
+    console.error('Save code error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
-});
+};
+
+// POST /api/contest/questions/:id/save — save code
+router.post('/:id/save', requireContestant, saveCodeHandler);
+// PUT /api/contest/questions/:id/code — save code (legacy)
+router.put('/:id/code', requireContestant, saveCodeHandler);
+// POST /api/contest/questions/:id/code — save code (fallback)
+router.post('/:id/code', requireContestant, saveCodeHandler);
 
 // POST /api/contest/questions/:id/check — evaluate code
 router.post('/:id/check', requireContestant, async (req: AuthRequest, res: Response) => {
@@ -142,7 +149,6 @@ router.post('/:id/check', requireContestant, async (req: AuthRequest, res: Respo
     return res.json({
       compilationError: result.compilationError,
       safeMessage: result.safeMessage,
-      // No test data, no expected output, no hidden inputs
     });
   } catch (err) {
     console.error('POST /questions/:id/check error:', err);

@@ -31,9 +31,9 @@ export const authApi = {
   me: () => api.get('/auth/me'),
 
   adminLogin: (username: string, password: string) =>
-    api.post('/auth/admin/login', { username, password }),
+    api.post('/admin/login', { username, password }),
 
-  adminLogout: () => api.post('/auth/admin/logout'),
+  adminLogout: () => api.post('/admin/logout'),
 };
 
 // ============================================================
@@ -75,7 +75,8 @@ export const questionApi = {
 
 export const answerApi = {
   saveCode: (question_id: string, attempt_id: string, code: string) =>
-    api.put(`/contest/questions/${question_id}/code`, { attempt_id, code }),
+    api.post(`/contest/questions/${question_id}/save`, { attempt_id, code })
+      .catch(() => api.put(`/contest/questions/${question_id}/code`, { attempt_id, code })),
 
   checkCode: (question_id: string, attempt_id: string, code: string) =>
     api.post(`/contest/questions/${question_id}/check`, { attempt_id, code }),

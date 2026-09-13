@@ -192,15 +192,16 @@ router.post('/language', requireContestant, async (req: AuthRequest, res: Respon
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
 
-    for (let idx = 0; idx < shuffled.length; idx++) {
-      const q = shuffled[idx];
-      await query(
-        `INSERT INTO answers (attempt_id, question_id, code, status, assigned_order)
-         VALUES ($1, $2, $3, 'NOT_VISITED', $4)
-         ON CONFLICT (attempt_id, question_id) DO UPDATE SET assigned_order = EXCLUDED.assigned_order`,
-        [attempt_id, q.id, q.starter_code, idx + 1]
-      );
-    }
+    await Promise.all(
+      shuffled.map((q, idx) =>
+        query(
+          `INSERT INTO answers (attempt_id, question_id, code, status, assigned_order)
+           VALUES ($1, $2, $3, 'NOT_VISITED', $4)
+           ON CONFLICT (attempt_id, question_id) DO UPDATE SET assigned_order = EXCLUDED.assigned_order`,
+          [attempt_id, q.id, q.starter_code, idx + 1]
+        )
+      )
+    );
 
     return res.json({
       message: 'Contest started',

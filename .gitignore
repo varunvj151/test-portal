@@ -2,11 +2,16 @@ node_modules/
 dist/
 build/
 .env
+.env.*
+*.env
 *.env.local
 *.env.production
+backend/.env
+frontend/.env
 .DS_Store
 Thumbs.db
 *.log
 coverage/
 .nyc_output/
 *.tsbuildinfo
+.vercel

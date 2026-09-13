@@ -29,7 +29,7 @@ export default function App() {
           <Route path="/rules" element={<RulesPage />} />
           <Route path="/language" element={<LanguageSelectionPage />} />
           <Route path="/contest" element={<ContestPage />} />
-          <Route path="/admin" element={<Navigate to="/admin/login" replace />} />
+          <Route path="/admin" element={<AdminLoginPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="*" element={<Navigate to="/login" replace />} />

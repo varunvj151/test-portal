@@ -1,276 +1,272 @@
 # Debugging Contest Platform
 
-**Hindusthan Institute of Technology**
-Department of Artificial Intelligence and Data Science
+**Hindusthan Institute of Technology**  
+Department of Artificial Intelligence and Data Science  
 
-A production-ready online debugging contest platform supporting C, Java, and Python.
-
----
-
-## Architecture
-
-```
-frontend/          React + Vite + TypeScript + Monaco Editor
-backend/           Node.js + Express + TypeScript
-database/          PostgreSQL (all migrations in backend/src/database/migrations/)
-judge/             Judge0 CE (Docker) or Judge0 RapidAPI
-```
-
-## Tech Stack
-
-| Layer       | Technology                          |
-|-------------|-------------------------------------|
-| Frontend    | React 18, Vite, TypeScript, Monaco  |
-| Backend     | Node.js, Express, TypeScript        |
-| Database    | PostgreSQL 13+                      |
-| Auth        | JWT (HTTP-only cookies), bcrypt     |
-| Judge       | Judge0 CE                           |
-| Styling     | Vanilla CSS (professional white)    |
+A production-ready online debugging contest platform supporting C, Java, and Python. Designed for unified single-URL deployment on **Vercel** with **Supabase PostgreSQL** and an **External Sandboxed Code Judge**.
 
 ---
 
-## Local Setup
+## 1. Architecture Overview
 
-### Prerequisites
+Students and administrators access the platform via a single website URL (e.g. `https://debugging-contest.vercel.app`):
 
-- Node.js 18+
-- PostgreSQL 13+
-- Docker (for Judge0 sandbox) OR Judge0 RapidAPI account
+```
+                               ┌────────────────────────────────────────┐
+                               │       Vercel (Single Project URL)      │
+                               └──────────────────┬─────────────────────┘
+                                                  │
+                  ┌───────────────────────────────┴──────────────────────────────┐
+                  ▼                                                              ▼
+    ┌───────────────────────────┐                                 ┌───────────────────────────┐
+    │  Vercel Frontend (SPA)    │                                 │ Vercel Functions (/api/*) │
+    │  React 18 + Vite + Monaco │                                 │ Node.js Serverless Lambdas│
+    │  /login, /admin, /contest │                                 │ Auth, Contest, Admin APIs │
+    └───────────────────────────┘                                 └─────────────┬─────────────┘
+                                                                                │
+                                           ┌────────────────────────────────────┴──────────────────────────────┐
+                                           ▼                                                                   ▼
+                            ┌─────────────────────────────┐                                     ┌─────────────────────────────┐
+                            │     Supabase PostgreSQL     │                                     │    External Judge Service   │
+                            │  Pooled Database (pg-pool)  │                                     │ Judge0 CE / RapidAPI Cloud  │
+                            │   Timer, Attempts, Answers  │                                     │  Sandboxed C / Java / Python│
+                            └─────────────────────────────┘                                     └─────────────────────────────┘
+```
 
-### 1. Clone and configure
+| Layer | Production Architecture | Local Development Architecture |
+|---|---|---|
+| **Frontend** | Vercel Static Hosting (SPA) | Vite Dev Server (`localhost:5173`) |
+| **Backend APIs** | Vercel Serverless Functions (`api/index.ts`) | Express Server (`localhost:4000`) |
+| **Database** | Supabase Managed PostgreSQL (SSL) | Local PostgreSQL or Supabase |
+| **Code Judge** | External Sandboxed Judge0 (Cloud / Self-Hosted) | Local Docker Judge0 or RapidAPI |
+| **Styling** | Vanilla CSS (Professional White Theme) | Vanilla CSS |
+| **Auth** | HTTP-only Cookies + Signed JWT | HTTP-only Cookies + Signed JWT |
 
+---
+
+## 2. Repository Structure
+
+```
+test-portal/
+├── api/
+│   └── index.ts               # Vercel Serverless Function entrypoint
+├── backend/
+│   ├── src/
+│   │   ├── app.ts             # Reusable Express application (no listen call)
+│   │   ├── index.ts           # Standalone local server listener
+│   │   ├── database/
+│   │   │   ├── connection.ts  # Serverless-safe Supabase connection pool
+│   │   │   ├── migrate.ts     # SQL migration runner
+│   │   │   ├── seed.ts        # Database seed (10 questions/lang, admin, contestants)
+│   │   │   └── migrations/    # Versioned SQL migration files
+│   │   ├── middleware/        # JWT auth, role guards, rate limiting
+│   │   ├── routes/            # auth, contest, questions, answers, security, admin
+│   │   ├── services/
+│   │   │   ├── contestService.ts # Server-authoritative timer, auto-submit, scoring
+│   │   │   └── judgeService.ts   # Clean external sandboxed judge abstraction
+│   │   └── __tests__/         # Jest integration test suite
+│   ├── package.json
+│   └── tsconfig.json
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx            # SPA client router (/login, /admin, /contest, etc.)
+│   │   ├── pages/             # LoginPage, AdminLoginPage, ContestPage, etc.
+│   │   ├── services/api.ts    # Centralized Axios client (/api/*)
+│   │   └── styles/            # CSS theme variables and components
+│   ├── package.json
+│   └── vite.config.ts
+├── .env.example               # Documentation of all environment variables
+├── .gitignore                 # Strict ignore rules for .env, builds, logs
+├── docker-compose.db.yml      # Local dev database container
+├── docker-compose.judge0.yml  # Local dev Judge0 container
+├── judge0.conf                # Local Judge0 configuration
+├── package.json               # Root workspaces configuration & unified scripts
+├── tsconfig.json              # Root TypeScript project references
+└── vercel.json                # Vercel build & single-URL routing rewrites
+```
+
+---
+
+## 3. Frontend & API Routing
+
+### Student Routes
+- `/` &rarr; Redirects to `/login`
+- `/login` &rarr; Student Registration Number & Password Login
+- `/home` &rarr; Student Welcome & Instructions
+- `/rules` &rarr; Contest Rules & Proctoring Policies
+- `/language` &rarr; Language Selection (C, Java, Python)
+- `/contest` &rarr; Full-screen Protected Contest Interface
+
+### Admin Routes
+- `/admin` &rarr; Admin Login Portal
+- `/admin/dashboard` &rarr; Live Contestant Monitoring, Leaderboard, Violations & Results
+
+### Vercel Serverless API Endpoints
+All backend endpoints are routed through `/api/*` without conflicting with frontend routes:
+- **Authentication**:
+  - `POST /api/auth/login` (Contestant login)
+  - `POST /api/auth/logout` (Contestant logout)
+  - `GET /api/auth/me` (Session validation)
+  - `POST /api/admin/login` (Admin login)
+  - `POST /api/admin/logout` (Admin logout)
+- **Contest**:
+  - `GET /api/contest` (Get contest metadata & current attempt)
+  - `POST /api/contest/start` (Start or resume attempt)
+  - `POST /api/contest/language` (Select language & randomize question order)
+  - `POST /api/contest/heartbeat` (Server-side timer validation & sync)
+  - `GET /api/contest/attempt` (Retrieve attempt state)
+  - `GET /api/contest/questions` (Retrieve shuffled questions for active attempt)
+  - `POST /api/contest/questions/:id/save` (Debounced autosave)
+  - `POST /api/contest/questions/:id/check` (Compile and check code against test cases)
+  - `POST /api/contest/security-event` (Report proctoring security violation)
+  - `POST /api/contest/submit` (Final submission & server-side scoring)
+- **Admin**:
+  - `GET /api/admin/dashboard` (Live stats)
+  - `GET /api/admin/contestants` (List all contestants)
+  - `POST /api/admin/contestants` (Add contestant, default password `regno@hitech`)
+  - `POST /api/admin/contestants/reset-by-regno` (Grant reattempt access)
+  - `DELETE /api/admin/contestants/:id` (Remove contestant)
+  - `GET /api/admin/attempts` (All attempt logs)
+  - `GET /api/admin/leaderboard` (Live ranked leaderboard)
+  - `GET /api/admin/violations` (Audit trail of security events)
+  - `GET /api/admin/results` (Detailed question-by-question marks)
+- **Health**:
+  - `GET /api/health` (System status & timestamp)
+
+---
+
+## 4. Environment Variables
+
+Create your local `.env` or set these in your Vercel Project Settings:
+
+| Variable | Required | Description | Example |
+|---|---|---|---|
+| `DATABASE_URL` | Yes | PostgreSQL connection string | `postgresql://postgres:Admin123%40hitech@db.cyrcwbmrvzsqscrqhrvo.supabase.co:5432/postgres` |
+| `JWT_SECRET` | Yes | Secret key for signing JWT tokens | `min-32-chars-long-random-string` |
+| `JWT_EXPIRES_IN`| No | Token expiry duration (default: `8h`) | `8h` |
+| `JUDGE_URL` | Yes | External Judge0 URL | `https://judge0-ce.p.rapidapi.com` or `http://your-judge:2358` |
+| `JUDGE_API_KEY` | Conditional | API key if using RapidAPI Judge0 | `your-rapidapi-key-here` |
+| `JUDGE_HOST` | No | RapidAPI host header (default: `judge0-ce.p.rapidapi.com`) | `judge0-ce.p.rapidapi.com` |
+| `NODE_ENV` | Yes | Environment mode | `production` |
+| `FRONTEND_URL` | No | CORS allowed origin | `https://your-contest.vercel.app` |
+| `PG_MAX_POOL` | No | Serverless pool connection limit | `2` (default for serverless) |
+| `CONTEST_ID` | No | Target specific contest UUID | *(leave blank for latest active contest)* |
+
+> **Note on Special Characters in Database Password**: If your database password contains special characters like `@` (e.g. `Admin123@hitech`), `connection.ts` automatically parses and URL-encodes it (`Admin123%40hitech`) to prevent connection parsing errors.
+
+---
+
+## 5. Local Setup & Development
+
+### 1. Install all dependencies from root
 ```bash
-# Copy environment files
+npm install
+```
+
+### 2. Configure Environment
+Copy `.env.example` to `backend/.env`:
+```bash
 cp .env.example backend/.env
 ```
+Ensure `DATABASE_URL` and `JWT_SECRET` are set.
 
-Edit `backend/.env`:
-
-```
-DATABASE_URL=postgresql://user:password@localhost:5432/debugcontest
-JWT_SECRET=your-very-long-random-secret
-ADMIN_SECRET=your-admin-password
-JUDGE0_URL=http://localhost:2358
-JUDGE0_API_KEY=          # leave empty for local Judge0
-PORT=4000
-NODE_ENV=development
-FRONTEND_URL=http://localhost:5173
-CONTEST_ID=              # leave empty to use first active contest
-```
-
-### 2. Database
-
+### 3. Run Database Migrations & Seed
+Run migrations and populate questions against your database:
 ```bash
-# Create the database
-createdb debugcontest
-
-# Run migrations
-cd backend
 npm run migrate
-
-# Seed demo data (contestants, questions, admin)
 npm run seed
 ```
 
-### 3. Judge0 (local Docker)
-
+### 4. Run Development Servers
+Start both backend (port 4000) and frontend (port 5173) simultaneously:
 ```bash
-# Start Judge0 sandbox
-docker-compose -f docker-compose.judge0.yml up -d
-
-# Wait ~60 seconds for services to initialize
-# Verify: curl http://localhost:2358/about
-```
-
-Alternatively, use [Judge0 on RapidAPI](https://rapidapi.com/judge0-official/api/judge0-ce):
-- Set `JUDGE0_URL=https://judge0-ce.p.rapidapi.com`
-- Set `JUDGE0_API_KEY=your-rapidapi-key`
-
-### 4. Run Backend
-
-```bash
-cd backend
-npm install
 npm run dev
 ```
+Visit `http://localhost:5173` to test.
 
-Server runs at: `http://localhost:4000`
-
-### 5. Run Frontend
-
+### 5. Run Test Suite
 ```bash
-cd frontend
-npm install
-npm run dev
-```
-
-App runs at: `http://localhost:5173`
-
----
-
-## Environment Variables
-
-| Variable          | Required | Description                         |
-|-------------------|----------|-------------------------------------|
-| DATABASE_URL      | Yes      | PostgreSQL connection string        |
-| JWT_SECRET        | Yes      | Secret for JWT signing (min 32 chars)|
-| JUDGE0_URL        | Yes      | Judge0 base URL                     |
-| JUDGE0_API_KEY    | No       | RapidAPI key (if using cloud Judge0)|
-| PORT              | No       | Backend port (default: 4000)        |
-| NODE_ENV          | No       | production / development            |
-| FRONTEND_URL      | No       | Allowed CORS origin                 |
-| CONTEST_ID        | No       | Specific contest UUID to use        |
-
----
-
-## Database Setup
-
-### Run Migrations
-
-```bash
-cd backend
-npm run migrate
-```
-
-### Seed Demo Data
-
-Creates:
-- 3 demo contestants (reg numbers: 720824108119, 720824108120, 720824108121)
-- Default passwords: `<reg_number>@hitech`
-- 1 admin user: username=`admin`, password=`Admin@HiTech2024`
-- 1 active contest: "Debugging Contest" (60 min, 3 max violations)
-- 18 questions: 6 per language (C, Java, Python), 3 hidden test cases each
-
-```bash
-cd backend
-npm run seed
-```
-
----
-
-## Testing
-
-```bash
-cd backend
 npm test
 ```
 
-Tests require a running PostgreSQL database with migrations and seed data applied.
-
-Tests cover:
-- Authentication (valid, invalid, unauthorized)
-- Contest lifecycle (start, language selection, language locking)
-- Attempt ownership enforcement
-- One-attempt restriction
-- Security event logging and debouncing
-- Submission and duplicate submission rejection
-- Admin authorization (contestants cannot access admin APIs)
-
----
-
-## Deployment
-
-### Frontend → Vercel
-
+### 6. Test Production Build Locally
 ```bash
-cd frontend
 npm run build
-# Deploy dist/ to Vercel
-```
-
-Set environment variable in Vercel:
-- `VITE_API_URL` — not needed (Vite proxy handles it in dev; configure Vercel rewrites for prod)
-
-### Backend → Railway / Render
-
-1. Push to GitHub
-2. Connect repo to Railway or Render
-3. Set all environment variables
-4. Set build command: `npm run build`
-5. Set start command: `npm start`
-
-### Database → Supabase
-
-1. Create project at [supabase.com](https://supabase.com)
-2. Copy connection string to `DATABASE_URL`
-3. Run: `npm run migrate && npm run seed`
-
----
-
-## Admin Setup
-
-Default admin credentials (from seed):
-- Username: `admin`
-- Password: `Admin@HiTech2024`
-
-**Change this immediately in production** by updating the admin table directly:
-
-```sql
-UPDATE admins SET password_hash = '<new bcrypt hash>' WHERE username = 'admin';
-```
-
-Access admin panel: `http://localhost:5173/admin`
-
----
-
-## Adding Contestants
-
-**Method 1: Admin UI**
-1. Log in to admin panel
-2. Go to "Contestants"
-3. Add individual or bulk import
-
-**Method 2: Direct seed**
-Edit `backend/src/database/seed.ts` and re-run `npm run seed`.
-
-**Method 3: API (admin authenticated)**
-```
-POST /api/admin/contestants/bulk
-Body: { contestants: [{ registration_number, name, department }] }
 ```
 
 ---
 
-## Contest Configuration
+## 6. Manual Vercel Deployment Guide
 
-Questions are stored in the database. The seed creates 6 questions per language.
+Deploying to Vercel requires zero CLI commands. Follow these exact steps:
 
-To modify questions:
-1. Use the Admin UI (Questions section — edit existing or add new)
-2. Or directly via the admin API
+### Step 1: Commit and Push to GitHub
+```bash
+git add .
+git commit -m "Prepare repository for Vercel deployment with Supabase and External Judge"
+git push origin main
+```
+
+### Step 2: Import into Vercel
+1. Log in to [vercel.com](https://vercel.com).
+2. Click **Add New...** &rarr; **Project**.
+3. Select your repository (`varunvj151/test-portal`) and click **Import**.
+
+### Step 3: Configure Project Settings in Vercel
+- **Framework Preset**: `Vite` (or `Other`)
+- **Root Directory**: `./` (leave at repository root)
+- **Build Command**: `npm run build` *(auto-configured via vercel.json)*
+- **Output Directory**: `frontend/dist` *(auto-configured via vercel.json)*
+- **Install Command**: `npm install`
+
+### Step 4: Add Environment Variables in Vercel
+In the **Environment Variables** section, add:
+1. `DATABASE_URL`: `postgresql://postgres:Admin123%40hitech@db.cyrcwbmrvzsqscrqhrvo.supabase.co:5432/postgres`
+2. `JWT_SECRET`: *(A secure 32+ character random string)*
+3. `JUDGE_URL`: Your external Judge0 endpoint (e.g. `https://judge0-ce.p.rapidapi.com` or self-hosted Judge0 instance)
+4. `JUDGE_API_KEY`: *(Your RapidAPI key if using RapidAPI, otherwise leave blank)*
+5. `NODE_ENV`: `production`
+
+### Step 5: Deploy
+Click **Deploy**. Vercel will build the backend TypeScript, compile the React frontend into `frontend/dist`, and mount the Serverless Function at `/api`.
 
 ---
 
-## Known Limitations
+## 7. Code Judge Configuration Options
 
-See [SECURITY.md](SECURITY.md) for detailed security analysis and known limitations.
+Contestant code is **never** executed inside Vercel Functions (`child_process`, `spawn`, `eval` are strictly forbidden). All code evaluation calls the isolated external judge service:
 
-1. **Judge0 dependency**: Code execution requires Judge0 to be running. If Judge0 is unavailable, `CHECK CODE` returns a service-unavailable error. Code is still saved.
+### Option A: RapidAPI Judge0 Cloud
+1. Subscribe to [Judge0 CE on RapidAPI](https://rapidapi.com/judge0-official/api/judge0-ce).
+2. Set in Vercel:
+   ```
+   JUDGE_URL=https://judge0-ce.p.rapidapi.com
+   JUDGE_API_KEY=<your-rapidapi-key>
+   JUDGE_HOST=judge0-ce.p.rapidapi.com
+   ```
 
-2. **Fullscreen**: Browser fullscreen is requestable via JavaScript but cannot be forced indefinitely. If a user presses F11 or Esc, the browser handles it. We detect the exit and log a violation.
+### Option B: Self-Hosted Remote Judge0 (Docker)
+1. Deploy Judge0 on any VPS (DigitalOcean, AWS EC2, Hetzner) using `docker-compose.judge0.yml`.
+2. Set in Vercel:
+   ```
+   JUDGE_URL=http://<vps-ip-or-domain>:2358
+   JUDGE_API_KEY=
+   ```
 
-3. **Screenshots**: OS-level screenshots cannot be prevented by a web application. The platform logs `PrintScreen` key press attempts when detectable by the browser. This is a best-effort deterrent.
+---
 
-4. **AI Extensions**: Browser extensions operate outside the page sandbox. We implement clipboard protection and disable text selection, but cannot detect all AI assistant extensions.
+## 8. Credentials & Access
 
-5. **Tab switching via Alt+Tab**: Window blur events are monitored, but some OS actions (like dragging to another desktop) may not trigger window blur in all browsers.
+### Default Admin Credentials
+- **URL**: `/admin`
+- **Username**: `admin`
+- **Password**: `Admin@HiTech2024`
 
-**Recommendation for real contests**: Use a controlled computer lab environment with extensions disabled, no personal devices, and physical invigilation.
+### Default Contestant Credentials (from seed)
+- **URL**: `/login`
+- **Registration Number**: `720824108119`
+- **Password**: `720824108119@hitech`
+- *(Additional seeded accounts: `720824108120`, `720824108121`)*
 
-# 1. Create PostgreSQL database
-createdb debugcontest
-
-# 2. Backend setup
-cd backend
-# Edit .env — DATABASE_URL is pre-filled for local postgres:postgres
-npm run migrate
-npm run seed
-npm run dev
-
-# 3. Frontend (new terminal)
-cd frontend
-npm run dev
-
-# Open: http://localhost:5173
-# Admin: http://localhost:5173/admin  (admin / Admin@HiTech2024)
-# Demo contestant: 720824108119 / 720824108119@hitech
+### Adding New Contestants
+Administrators can add contestants in the Admin Dashboard (`/admin/dashboard`). Passwords are automatically generated using the formula `<regno>@hitech`.

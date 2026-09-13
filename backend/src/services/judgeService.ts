@@ -1,21 +1,22 @@
 import axios from 'axios';
-import { spawn } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import crypto from 'crypto';
 
 // Judge0 language IDs
-const LANGUAGE_IDS: Record<string, number> = {
+export const LANGUAGE_IDS: Record<string, number> = {
   C: 50,       // C (GCC 9.2.0)
   JAVA: 62,    // Java (OpenJDK 13.0.1)
   PYTHON: 71,  // Python (3.8.1)
 };
 
-const JUDGE0_URL = process.env.JUDGE0_URL || 'http://localhost:2358';
-const JUDGE0_API_KEY = process.env.JUDGE0_API_KEY || '';
+const JUDGE_URL = (
+  process.env.JUDGE_URL ||
+  process.env.JUDGE0_URL ||
+  'http://localhost:2358'
+).replace(/\/+$/, '');
 
-interface SubmissionResult {
+const JUDGE_API_KEY = process.env.JUDGE_API_KEY || process.env.JUDGE0_API_KEY || '';
+const JUDGE_HOST = process.env.JUDGE_HOST || process.env.JUDGE0_HOST || 'judge0-ce.p.rapidapi.com';
+
+export interface SubmissionResult {
   status: {
     id: number;
     description: string;
@@ -28,12 +29,41 @@ interface SubmissionResult {
   token?: string;
 }
 
-const headers: Record<string, string> = {
-  'Content-Type': 'application/json',
-};
-if (JUDGE0_API_KEY) {
-  headers['X-RapidAPI-Key'] = JUDGE0_API_KEY;
-  headers['X-RapidAPI-Host'] = 'judge0-ce.p.rapidapi.com';
+export interface JudgeExecutionResult {
+  passed: boolean;
+  compilationError: boolean;
+  compileOutput: string;
+  stdout: string;
+  stderr: string;
+  statusDescription: string;
+  token?: string;
+}
+
+export interface TestCase {
+  input_data: string;
+  expected_output: string;
+  is_hidden?: boolean;
+}
+
+export interface EvaluationResult {
+  compilationError: boolean;
+  compileOutput: string;
+  totalTests: number;
+  passedTests: number;
+  status: 'ACCEPTED' | 'WRONG_ANSWER' | 'COMPILE_ERROR' | 'RUNTIME_ERROR' | 'TIME_LIMIT_EXCEEDED';
+  safeMessage: string;
+}
+
+function getHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (JUDGE_API_KEY) {
+    headers['X-RapidAPI-Key'] = JUDGE_API_KEY;
+    headers['X-RapidAPI-Host'] = JUDGE_HOST;
+    headers['X-Auth-Token'] = JUDGE_API_KEY;
+  }
+  return headers;
 }
 
 function decodeBase64(s: string | null | undefined): string {
@@ -45,268 +75,27 @@ function decodeBase64(s: string | null | undefined): string {
   }
 }
 
-function normalizeOutput(str: string): string {
-  return str
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .split('\n')
-    .map(line => line.trimEnd())
-    .join('\n')
-    .trim();
-}
-
 /**
- * Run a process with timeout and return stdout/stderr/exitCode.
+ * Submit code to an external sandboxed judge service.
+ * Supports C, Java, and Python.
+ * Never executes code inside the serverless runtime.
  */
-function runProcess(
-  cmd: string,
-  args: string[],
-  stdin: string,
-  timeoutMs = 5000,
-  cwd?: string
-): Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean }> {
-  return new Promise((resolve) => {
-    let timedOut = false;
-    let stdout = '';
-    let stderr = '';
-
-    const child = spawn(cmd, args, {
-      cwd: cwd || os.tmpdir(),
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try { child.kill('SIGKILL'); } catch {}
-    }, timeoutMs);
-
-    child.stdout?.on('data', (data) => {
-      stdout += data.toString();
-    });
-
-    child.stderr?.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      resolve({ stdout, stderr: err.message, exitCode: 1, timedOut: false });
-    });
-
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({ stdout, stderr, exitCode: code, timedOut });
-    });
-
-    try {
-      if (stdin) {
-        child.stdin?.write(stdin);
-      }
-      child.stdin?.end();
-    } catch {
-      // Stream might be closed
-    }
-  });
-}
-
-/**
- * Local Native Fallback Runner
- * Executes code locally when Judge0 (Docker) is unavailable.
- */
-export async function runCodeLocally(
+export async function submitCode(
   language: string,
   sourceCode: string,
-  stdin: string,
-  expectedOutput: string
-): Promise<{
-  passed: boolean;
-  compilationError: boolean;
-  compileOutput: string;
-  stderr: string;
-  statusDescription: string;
-}> {
-  const tmpDir = os.tmpdir();
-  const runId = crypto.randomBytes(6).toString('hex');
-
-  // --- PYTHON ---
-  if (language === 'PYTHON') {
-    const filePath = path.join(tmpDir, `solution_${runId}.py`);
-    try {
-      fs.writeFileSync(filePath, sourceCode, 'utf8');
-      const pythonCmd = process.platform === 'win32'
-        ? (fs.existsSync('C:\\Python314\\python.exe') ? 'C:\\Python314\\python.exe' : 'python')
-        : 'python3';
-
-      const result = await runProcess(pythonCmd, [filePath], stdin, 5000);
-
-      if (result.timedOut) {
-        return { passed: false, compilationError: false, compileOutput: '', stderr: '', statusDescription: 'Time Limit Exceeded' };
-      }
-
-      if (result.exitCode !== 0) {
-        const isSyntax = result.stderr.includes('SyntaxError') || result.stderr.includes('IndentationError');
-        return {
-          passed: false,
-          compilationError: isSyntax,
-          compileOutput: isSyntax ? result.stderr : '',
-          stderr: result.stderr,
-          statusDescription: isSyntax ? 'Compilation Error' : 'Runtime Error',
-        };
-      }
-
-      const passed = normalizeOutput(result.stdout) === normalizeOutput(expectedOutput);
-      return {
-        passed,
-        compilationError: false,
-        compileOutput: '',
-        stderr: '',
-        statusDescription: passed ? 'Accepted' : 'Wrong Answer',
-      };
-    } finally {
-      try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch {}
-    }
-  }
-
-  // --- JAVA ---
-  if (language === 'JAVA') {
-    const javaDir = path.join(tmpDir, `java_${runId}`);
-    try {
-      fs.mkdirSync(javaDir, { recursive: true });
-      const filePath = path.join(javaDir, 'Main.java');
-      fs.writeFileSync(filePath, sourceCode, 'utf8');
-
-      const javacCmd = 'javac';
-      const compileRes = await runProcess(javacCmd, ['-encoding', 'UTF-8', 'Main.java'], '', 8000, javaDir);
-      if (compileRes.exitCode !== 0) {
-        return {
-          passed: false,
-          compilationError: true,
-          compileOutput: compileRes.stderr || 'Compilation failed',
-          stderr: compileRes.stderr,
-          statusDescription: 'Compilation Error',
-        };
-      }
-
-      const javaCmd = 'java';
-      const runRes = await runProcess(javaCmd, ['-cp', '.', 'Main'], stdin, 5000, javaDir);
-      if (runRes.timedOut) {
-        return { passed: false, compilationError: false, compileOutput: '', stderr: '', statusDescription: 'Time Limit Exceeded' };
-      }
-      if (runRes.exitCode !== 0) {
-        return {
-          passed: false,
-          compilationError: false,
-          compileOutput: '',
-          stderr: runRes.stderr,
-          statusDescription: 'Runtime Error',
-        };
-      }
-
-      const passed = normalizeOutput(runRes.stdout) === normalizeOutput(expectedOutput);
-      return {
-        passed,
-        compilationError: false,
-        compileOutput: '',
-        stderr: '',
-        statusDescription: passed ? 'Accepted' : 'Wrong Answer',
-      };
-    } finally {
-      try { fs.rmSync(javaDir, { recursive: true, force: true }); } catch {}
-    }
-  }
-
-  // --- C ---
-  if (language === 'C') {
-    const cDir = path.join(tmpDir, `c_${runId}`);
-    try {
-      fs.mkdirSync(cDir, { recursive: true });
-      const cFile = path.join(cDir, 'main.c');
-      const exeFile = path.join(cDir, process.platform === 'win32' ? 'main.exe' : 'main');
-      fs.writeFileSync(cFile, sourceCode, 'utf8');
-
-      const compileRes = await runProcess('gcc', ['-O2', 'main.c', '-o', exeFile], '', 8000, cDir);
-      if (compileRes.stderr.includes('not recognized') || compileRes.stderr.includes('ENOENT')) {
-        return {
-          passed: false,
-          compilationError: true,
-          compileOutput: 'GCC compiler is not installed locally on this server. Please install GCC or run with Python/Java.',
-          stderr: 'GCC not found',
-          statusDescription: 'Compilation Error',
-        };
-      }
-
-      if (compileRes.exitCode !== 0) {
-        return {
-          passed: false,
-          compilationError: true,
-          compileOutput: compileRes.stderr || 'Compilation failed',
-          stderr: compileRes.stderr,
-          statusDescription: 'Compilation Error',
-        };
-      }
-
-      const runRes = await runProcess(exeFile, [], stdin, 5000, cDir);
-      if (runRes.timedOut) {
-        return { passed: false, compilationError: false, compileOutput: '', stderr: '', statusDescription: 'Time Limit Exceeded' };
-      }
-      if (runRes.exitCode !== 0) {
-        return {
-          passed: false,
-          compilationError: false,
-          compileOutput: '',
-          stderr: runRes.stderr,
-          statusDescription: 'Runtime Error',
-        };
-      }
-
-      const passed = normalizeOutput(runRes.stdout) === normalizeOutput(expectedOutput);
-      return {
-        passed,
-        compilationError: false,
-        compileOutput: '',
-        stderr: '',
-        statusDescription: passed ? 'Accepted' : 'Wrong Answer',
-      };
-    } finally {
-      try { fs.rmSync(cDir, { recursive: true, force: true }); } catch {}
-    }
-  }
-
-  return {
-    passed: false,
-    compilationError: false,
-    compileOutput: '',
-    stderr: 'Unsupported language',
-    statusDescription: 'Wrong Answer',
-  };
-}
-
-/**
- * Submit code to Judge0 and wait for result.
- */
-export async function runCode(
-  language: string,
-  sourceCode: string,
-  stdin: string,
-  expectedOutput: string
-): Promise<{
-  passed: boolean;
-  compilationError: boolean;
-  compileOutput: string;
-  stderr: string;
-  statusDescription: string;
-}> {
-  const languageId = LANGUAGE_IDS[language];
+  stdin: string = '',
+  expectedOutput?: string
+): Promise<JudgeExecutionResult> {
+  const normalizedLang = language.toUpperCase();
+  const languageId = LANGUAGE_IDS[normalizedLang];
   if (!languageId) {
-    throw new Error(`Unsupported language: ${language}`);
+    throw new Error(`Unsupported language: ${language}. Supported languages: C, JAVA, PYTHON`);
   }
 
-  const payload = {
+  const payload: Record<string, any> = {
     language_id: languageId,
     source_code: Buffer.from(sourceCode).toString('base64'),
     stdin: Buffer.from(stdin).toString('base64'),
-    expected_output: Buffer.from(expectedOutput).toString('base64'),
     cpu_time_limit: 5,
     cpu_extra_time: 1,
     wall_time_limit: 10,
@@ -318,48 +107,91 @@ export async function runCode(
     base64_encoded: true,
   };
 
-  const createResp = await axios.post(
-    `${JUDGE0_URL}/submissions?base64_encoded=true&wait=true`,
-    payload,
-    { headers, timeout: 10000 }
-  );
+  if (expectedOutput !== undefined) {
+    payload.expected_output = Buffer.from(expectedOutput).toString('base64');
+  }
 
-  const result: SubmissionResult = createResp.data;
+  try {
+    const response = await axios.post(
+      `${JUDGE_URL}/submissions?base64_encoded=true&wait=true`,
+      payload,
+      {
+        headers: getHeaders(),
+        timeout: 15000,
+      }
+    );
 
-  const compileOutput = decodeBase64(result.compile_output);
-  const stderr = decodeBase64(result.stderr);
-  const stdout = decodeBase64(result.stdout);
+    const result: SubmissionResult = response.data;
+    const compileOutput = decodeBase64(result.compile_output);
+    const stderr = decodeBase64(result.stderr);
+    const stdout = decodeBase64(result.stdout);
 
-  const statusId = result.status?.id;
-  const statusDescription = result.status?.description || 'Unknown';
-  const compilationError = statusId === 6;
-  const passed = statusId === 3;
+    const statusId = result.status?.id;
+    const statusDescription = result.status?.description || 'Unknown';
+    const compilationError = statusId === 6;
+    const passed = statusId === 3;
 
-  return {
-    passed,
-    compilationError,
-    compileOutput: compileOutput || '',
-    stderr: stderr || '',
-    statusDescription,
-  };
+    return {
+      passed,
+      compilationError,
+      compileOutput: compileOutput || '',
+      stdout,
+      stderr: stderr || '',
+      statusDescription,
+      token: result.token,
+    };
+  } catch (err: any) {
+    const errorMessage = err.response?.data?.message || err.message || 'Judge execution failed';
+    console.error(`Judge service error (${JUDGE_URL}):`, errorMessage);
+    throw new Error(`Code judge error: ${errorMessage}`);
+  }
 }
 
 /**
- * Run code against all hidden test cases for a question.
- * Uses Judge0 if available; automatically falls back to local execution.
+ * Check the status of an asynchronous submission by token.
  */
-export async function evaluateCode(
+export async function checkStatus(token: string): Promise<JudgeExecutionResult> {
+  try {
+    const response = await axios.get(
+      `${JUDGE_URL}/submissions/${token}?base64_encoded=true`,
+      {
+        headers: getHeaders(),
+        timeout: 10000,
+      }
+    );
+
+    const result: SubmissionResult = response.data;
+    const compileOutput = decodeBase64(result.compile_output);
+    const stderr = decodeBase64(result.stderr);
+    const stdout = decodeBase64(result.stdout);
+
+    const statusId = result.status?.id;
+    const statusDescription = result.status?.description || 'Unknown';
+    const compilationError = statusId === 6;
+    const passed = statusId === 3;
+
+    return {
+      passed,
+      compilationError,
+      compileOutput: compileOutput || '',
+      stdout,
+      stderr: stderr || '',
+      statusDescription,
+      token: result.token,
+    };
+  } catch (err: any) {
+    throw new Error(`Failed to check judge submission status: ${err.message}`);
+  }
+}
+
+/**
+ * Evaluates code against multiple test cases using the external sandboxed judge.
+ */
+export async function evaluateSubmission(
   language: string,
   sourceCode: string,
-  testCases: Array<{ input_data: string; expected_output: string; is_hidden: boolean }>
-): Promise<{
-  compilationError: boolean;
-  compileOutput: string;
-  totalTests: number;
-  passedTests: number;
-  status: 'ACCEPTED' | 'WRONG_ANSWER' | 'COMPILE_ERROR' | 'RUNTIME_ERROR' | 'TIME_LIMIT_EXCEEDED';
-  safeMessage: string;
-}> {
+  testCases: TestCase[]
+): Promise<EvaluationResult> {
   if (testCases.length === 0) {
     return {
       compilationError: false,
@@ -375,26 +207,20 @@ export async function evaluateCode(
   let compilationError = false;
   let compileOutput = '';
   let overallStatus: 'ACCEPTED' | 'WRONG_ANSWER' | 'COMPILE_ERROR' | 'RUNTIME_ERROR' | 'TIME_LIMIT_EXCEEDED' = 'ACCEPTED';
-  let useLocal = false;
 
   for (const tc of testCases) {
-    let result: {
-      passed: boolean;
-      compilationError: boolean;
-      compileOutput: string;
-      stderr: string;
-      statusDescription: string;
-    };
-
-    if (!useLocal) {
-      try {
-        result = await runCode(language, sourceCode, tc.input_data, tc.expected_output);
-      } catch {
-        useLocal = true;
-        result = await runCodeLocally(language, sourceCode, tc.input_data, tc.expected_output);
-      }
-    } else {
-      result = await runCodeLocally(language, sourceCode, tc.input_data, tc.expected_output);
+    let result: JudgeExecutionResult;
+    try {
+      result = await submitCode(language, sourceCode, tc.input_data, tc.expected_output);
+    } catch (err: any) {
+      return {
+        compilationError: true,
+        compileOutput: 'External judge communication failed. Please try again.',
+        totalTests: testCases.length,
+        passedTests: 0,
+        status: 'COMPILE_ERROR',
+        safeMessage: 'Compiled with error',
+      };
     }
 
     if (result.compilationError) {
@@ -409,7 +235,10 @@ export async function evaluateCode(
       break;
     }
 
-    if (result.statusDescription === 'Runtime Error' || result.statusDescription === 'Runtime Error (NZEC)') {
+    if (
+      result.statusDescription === 'Runtime Error' ||
+      result.statusDescription === 'Runtime Error (NZEC)'
+    ) {
       overallStatus = 'RUNTIME_ERROR';
     }
 
@@ -420,25 +249,32 @@ export async function evaluateCode(
     }
   }
 
-  if (passedTests === testCases.length) {
+  if (passedTests === testCases.length && !compilationError) {
     overallStatus = 'ACCEPTED';
   }
 
-  let safeMessage: string;
-  if (compilationError) {
-    safeMessage = compileOutput.includes('GCC compiler is not installed')
-      ? 'GCC compiler is not installed on this server. Please use Python or Java, or install MinGW.'
-      : 'Compiled with error';
-  } else {
-    safeMessage = 'Compiled without error';
-  }
+  const safeMessage = compilationError ? 'Compiled with error' : 'Compiled without error';
 
   return {
     compilationError,
-    compileOutput: compilationError ? (compileOutput || '(Compilation errors found — check your code)') : '',
+    compileOutput: compilationError
+      ? (compileOutput || '(Compilation errors found — check your code)')
+      : '',
     totalTests: testCases.length,
     passedTests,
     status: overallStatus,
     safeMessage,
   };
 }
+
+// Preserve existing function signature for backwards compatibility across contestService & answers
+export const evaluateCode = evaluateSubmission;
+
+export const judgeService = {
+  submitCode,
+  checkStatus,
+  evaluateSubmission,
+  evaluateCode,
+};
+
+export default judgeService;

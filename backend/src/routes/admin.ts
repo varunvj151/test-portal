@@ -1,9 +1,61 @@
 import { Router, Response, Request } from 'express';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { query } from '../database/connection';
 import { requireAdmin, AuthRequest } from '../middleware/auth';
+import { loginLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'debugging-contest-jwt-secret';
+
+// POST /api/admin/login
+router.post('/login', loginLimiter, async (req: Request, res: Response) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password required' });
+    }
+
+    const { rows } = await query('SELECT * FROM admins WHERE username = $1', [username]);
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const admin = rows[0];
+    if (!admin.is_active) {
+      return res.status(403).json({ error: 'Admin account is inactive' });
+    }
+
+    const valid = await bcrypt.compare(String(password), admin.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign(
+      { sub: admin.id, role: 'admin' },
+      JWT_SECRET,
+      { expiresIn: '12h' } as any
+    );
+
+    res.cookie('adminToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 12 * 60 * 60 * 1000,
+    });
+
+    return res.json({ message: 'Admin login successful' });
+  } catch (err) {
+    console.error('Admin login error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/admin/logout
+router.post('/logout', (req: Request, res: Response) => {
+  res.clearCookie('adminToken', { httpOnly: true, sameSite: 'strict' });
+  return res.json({ message: 'Logged out' });
+});
 
 // GET /api/admin/dashboard
 router.get('/dashboard', requireAdmin, async (req: AuthRequest, res: Response) => {
