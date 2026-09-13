@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  # Judge0 CE — isolated code execution sandbox
+  server:
+    image: judge0/judge0:1.13.0
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+    ports:
+      - "2358:2358"
+    privileged: true
+    restart: always
+    depends_on:
+      - db
+      - redis
+
+  workers:
+    image: judge0/judge0:1.13.0
+    command: ["./scripts/workers"]
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+    privileged: true
+    restart: always
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:13
+    env_file: ./judge0.conf
+    volumes:
+      - judge0-postgres-data:/var/lib/postgresql/data/
+    restart: always
+
+  redis:
+    image: redis:6
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+    volumes:
+      - judge0-redis-data:/data
+    restart: always
+
+volumes:
+  judge0-postgres-data:
+  judge0-redis-data:
