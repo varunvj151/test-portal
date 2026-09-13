@@ -1,4 +1,11 @@
 import axios from 'axios';
+import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), 'backend/.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../backend/.env') });
 
 // Judge0 language IDs
 export const LANGUAGE_IDS: Record<string, number> = {
