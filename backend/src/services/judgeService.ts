@@ -210,67 +210,84 @@ export async function evaluateSubmission(
     };
   }
 
+  // 1. Run the first test case first to verify compilation quickly
+  let firstResult: JudgeExecutionResult;
+  try {
+    firstResult = await submitCode(language, sourceCode, testCases[0].input_data, testCases[0].expected_output);
+  } catch (err: any) {
+    return {
+      compilationError: true,
+      compileOutput: 'External judge communication failed. Please try again.',
+      totalTests: testCases.length,
+      passedTests: 0,
+      status: 'COMPILE_ERROR',
+      safeMessage: 'Compiled with error',
+    };
+  }
+
+  // If compilation failed on first test case, return immediately without wasting judge bandwidth
+  if (firstResult.compilationError) {
+    return {
+      compilationError: true,
+      compileOutput: firstResult.compileOutput || '(Compilation errors found — check your code)',
+      totalTests: testCases.length,
+      passedTests: 0,
+      status: 'COMPILE_ERROR',
+      safeMessage: 'Compiled with error',
+    };
+  }
+
+  // 2. Since code compiled, evaluate any remaining test cases concurrently in parallel
+  const remainingTestCases = testCases.slice(1);
+  const remainingResults = await Promise.all(
+    remainingTestCases.map(async (tc) => {
+      try {
+        return await submitCode(language, sourceCode, tc.input_data, tc.expected_output);
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  const allResults = [firstResult, ...remainingResults];
   let passedTests = 0;
-  let compilationError = false;
-  let compileOutput = '';
   let overallStatus: 'ACCEPTED' | 'WRONG_ANSWER' | 'COMPILE_ERROR' | 'RUNTIME_ERROR' | 'TIME_LIMIT_EXCEEDED' = 'ACCEPTED';
 
-  for (const tc of testCases) {
-    let result: JudgeExecutionResult;
-    try {
-      result = await submitCode(language, sourceCode, tc.input_data, tc.expected_output);
-    } catch (err: any) {
-      return {
-        compilationError: true,
-        compileOutput: 'External judge communication failed. Please try again.',
-        totalTests: testCases.length,
-        passedTests: 0,
-        status: 'COMPILE_ERROR',
-        safeMessage: 'Compiled with error',
-      };
-    }
-
-    if (result.compilationError) {
-      compilationError = true;
-      compileOutput = result.compileOutput;
-      overallStatus = 'COMPILE_ERROR';
-      break;
+  for (const result of allResults) {
+    if (!result) {
+      if (overallStatus === 'ACCEPTED') overallStatus = 'WRONG_ANSWER';
+      continue;
     }
 
     if (result.statusDescription === 'Time Limit Exceeded') {
       overallStatus = 'TIME_LIMIT_EXCEEDED';
-      break;
-    }
-
-    if (
+    } else if (
       result.statusDescription === 'Runtime Error' ||
       result.statusDescription === 'Runtime Error (NZEC)'
     ) {
-      overallStatus = 'RUNTIME_ERROR';
+      if (overallStatus !== 'TIME_LIMIT_EXCEEDED') {
+        overallStatus = 'RUNTIME_ERROR';
+      }
+    } else if (!result.passed && overallStatus === 'ACCEPTED') {
+      overallStatus = 'WRONG_ANSWER';
     }
 
     if (result.passed) {
       passedTests++;
-    } else if (overallStatus === 'ACCEPTED') {
-      overallStatus = 'WRONG_ANSWER';
     }
   }
 
-  if (passedTests === testCases.length && !compilationError) {
+  if (passedTests === testCases.length) {
     overallStatus = 'ACCEPTED';
   }
 
-  const safeMessage = compilationError ? 'Compiled with error' : 'Compiled without error';
-
   return {
-    compilationError,
-    compileOutput: compilationError
-      ? (compileOutput || '(Compilation errors found — check your code)')
-      : '',
+    compilationError: false,
+    compileOutput: '',
     totalTests: testCases.length,
     passedTests,
     status: overallStatus,
-    safeMessage,
+    safeMessage: 'Compiled without error',
   };
 }
 

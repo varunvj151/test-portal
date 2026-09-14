@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { loader } from '@monaco-editor/react';
 
 const RULES = [
   'Contest duration is 60 minutes.',
@@ -35,6 +36,9 @@ export default function RulesPage() {
       return;
     }
     setAttemptId(id);
+
+    // Warm up and prefetch Monaco Editor assets from CDN in background so contest page opens instantly
+    loader.init().catch(() => {});
   }, []);
 
   const handleContinue = () => {

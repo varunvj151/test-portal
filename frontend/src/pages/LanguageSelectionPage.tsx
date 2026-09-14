@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { loader } from '@monaco-editor/react';
 import { contestApi } from '../services/api';
 
 const LANGUAGES = [
@@ -22,6 +23,9 @@ export default function LanguageSelectionPage() {
       return;
     }
     setAttemptId(id);
+
+    // Warm up and prefetch Monaco Editor in background so contest page opens instantly
+    loader.init().catch(() => {});
   }, []);
 
   const handleConfirm = async () => {
