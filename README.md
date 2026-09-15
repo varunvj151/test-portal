@@ -260,7 +260,7 @@ Contestant code is **never** executed inside Vercel Functions (`child_process`, 
 ### Default Admin Credentials
 - **URL**: `/admin`
 - **Username**: `admin`
-- **Password**: `Admin@HiTech2024`
+- **Password**: `admin@hitech`
 
 ### Default Contestant Credentials (from seed)
 - **URL**: `/login`

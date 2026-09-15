@@ -909,7 +909,7 @@ async function seed() {
     await client.query('BEGIN');
 
     // ---- Admin User ----
-    const adminHash = await bcrypt.hash('Admin@HiTech2024', 12);
+    const adminHash = await bcrypt.hash('admin@hitech', 12);
     await client.query(`
       INSERT INTO admins (username, password_hash)
       VALUES ($1, $2)
