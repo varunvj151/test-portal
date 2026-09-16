@@ -982,21 +982,31 @@ a:hover {
 
 .admin-layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--color-bg-subtle);
 }
 
 .admin-sidebar {
   width: 240px;
-  min-height: 100vh;
+  height: 100vh;
   background: var(--color-text);
   padding: var(--space-6) 0;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 .admin-sidebar__logo {
   padding: var(--space-4) var(--space-6) var(--space-6);
   border-bottom: 1px solid rgba(255,255,255,0.1);
   margin-bottom: var(--space-4);
+  flex-shrink: 0;
 }
 
 .admin-sidebar__logo h2 {
@@ -1010,6 +1020,18 @@ a:hover {
   color: rgba(255,255,255,0.5);
   font-size: var(--font-size-xs);
   margin-top: var(--space-1);
+}
+
+.admin-sidebar__nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-sidebar__footer {
+  margin-top: auto;
+  padding: var(--space-4) var(--space-6);
+  flex-shrink: 0;
 }
 
 .admin-nav-item {
@@ -1038,24 +1060,91 @@ a:hover {
 
 .admin-main {
   flex: 1;
+  height: 100vh;
   background: var(--color-bg-subtle);
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .admin-content {
-  padding: var(--space-8);
+  padding: var(--space-6) var(--space-8);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .admin-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-4);
+  flex-shrink: 0;
 }
 
 .admin-title {
   font-size: var(--font-size-2xl);
   font-weight: 700;
+}
+
+.admin-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Contestants Split View */
+.contestants-view-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.contestants-static-controls {
+  flex-shrink: 0;
+}
+
+.contestants-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+  background: var(--color-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Make table header sticky while scrolling through contestant names */
+.contestants-table-wrap thead th,
+.admin-scrollable-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #f8fafc;
+  box-shadow: 0 1px 0 var(--color-border);
+}
+
+.admin-scrollable-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: var(--space-1);
+}
+
+.admin-scrollable-table {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+  background: var(--color-bg);
+  box-shadow: var(--shadow-sm);
 }
 
 /* ============================================================

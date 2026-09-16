@@ -97,20 +97,22 @@ export default function AdminDashboard() {
           <h2>Contest Admin</h2>
           <p>Debugging Contest</p>
         </div>
-        {NAV_ITEMS.map(item => (
-          <div
-            key={item.id}
-            className={`admin-nav-item ${view === item.id ? 'admin-nav-item--active' : ''}`}
-            onClick={() => setView(item.id)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={e => e.key === 'Enter' && setView(item.id)}
-            id={`nav-${item.id}`}
-          >
-            {item.label}
-          </div>
-        ))}
-        <div style={{ marginTop: 'auto', padding: 'var(--space-4) var(--space-6)' }}>
+        <div className="admin-sidebar__nav">
+          {NAV_ITEMS.map(item => (
+            <div
+              key={item.id}
+              className={`admin-nav-item ${view === item.id ? 'admin-nav-item--active' : ''}`}
+              onClick={() => setView(item.id)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={e => e.key === 'Enter' && setView(item.id)}
+              id={`nav-${item.id}`}
+            >
+              {item.label}
+            </div>
+          ))}
+        </div>
+        <div className="admin-sidebar__footer">
           <button className="btn btn-secondary btn-sm btn-full" onClick={handleLogout}>
             Sign Out
           </button>
@@ -132,7 +134,9 @@ export default function AdminDashboard() {
               Refresh
             </button>
           </div>
-          {renderContent()}
+          <div className="admin-body">
+            {renderContent()}
+          </div>
         </div>
       </div>
     </div>
@@ -155,7 +159,7 @@ function DashboardView({ data }: { data: any }) {
   ];
 
   return (
-    <>
+    <div className="admin-scrollable-content">
       <div className="stats-grid">
         {items.map(item => (
           <div key={item.label} className="stat-card">
@@ -186,7 +190,7 @@ function DashboardView({ data }: { data: any }) {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -260,79 +264,83 @@ function ContestantsView({ data, onToggle, onRefresh }: { data: any; onToggle: a
   };
 
   return (
-    <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
-        {/* Add contestant card */}
-        <div className="card">
-          <h3 style={{ marginBottom: 'var(--space-2)' }}>Add Contestant</h3>
-          <p className="text-muted text-xs mb-3">
-            Enter register number. Password is automatically generated in the background as <code>&lt;regno&gt;@hitech</code>.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+    <div className="contestants-view-container">
+      {/* Static top control cards: Add Contestant & Grant Reattempt (UNSCROLLABLE) */}
+      <div className="contestants-static-controls">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
+          {/* Add contestant card */}
+          <div className="card">
+            <h3 style={{ marginBottom: 'var(--space-2)' }}>Add Contestant</h3>
+            <p className="text-muted text-xs mb-3">
+              Enter register number. Password is automatically generated in the background as <code>&lt;regno&gt;@hitech</code>.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+              <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                <input
+                  className="form-input"
+                  style={{ flex: '1', minWidth: '160px' }}
+                  placeholder="Register Number (e.g. 720824108125)"
+                  value={newReg}
+                  onChange={e => setNewReg(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                />
+                <input
+                  className="form-input"
+                  style={{ flex: '1', minWidth: '160px' }}
+                  placeholder="Student Name"
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+                <button className="btn btn-primary btn-sm" onClick={handleAdd}>
+                  + Add Contestant
+                </button>
+                {newReg.trim() && (
+                  <span className="text-xs text-muted">
+                    Auto password: <strong style={{ color: 'var(--color-text)' }}>{newReg.trim()}@hitech</strong>
+                  </span>
+                )}
+              </div>
+            </div>
+            {addError && <p className="text-danger text-sm mt-2">{addError}</p>}
+            {addSuccess && <p className="text-sm mt-2" style={{ color: '#22c55e', fontWeight: 500 }}>{addSuccess}</p>}
+          </div>
+
+          {/* Quick Grant Reattempt card */}
+          <div className="card">
+            <h3 style={{ marginBottom: 'var(--space-2)' }}>Grant Reattempt Access</h3>
+            <p className="text-muted text-xs mb-3">
+              If a contestant accidentally closed the test or got locked out, enter their register number to clear their session and let them reattempt.
+            </p>
             <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
               <input
                 className="form-input"
-                style={{ flex: '1', minWidth: '160px' }}
-                placeholder="Register Number (e.g. 720824108125)"
-                value={newReg}
-                onChange={e => setNewReg(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                style={{ flex: '1', minWidth: '180px' }}
+                placeholder="Register Number to reset"
+                value={resetReg}
+                onChange={e => setResetReg(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleQuickReset()}
               />
-              <input
-                className="form-input"
-                style={{ flex: '1', minWidth: '160px' }}
-                placeholder="Student Name"
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAdd()}
-              />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
-              <button className="btn btn-primary btn-sm" onClick={handleAdd}>
-                + Add Contestant
+              <button className="btn btn-secondary btn-sm" onClick={handleQuickReset}>
+                Grant Reattempt
               </button>
-              {newReg.trim() && (
-                <span className="text-xs text-muted">
-                  Auto password: <strong style={{ color: 'var(--color-text)' }}>{newReg.trim()}@hitech</strong>
-                </span>
-              )}
             </div>
+            {resetError && <p className="text-danger text-sm mt-2">{resetError}</p>}
+            {resetMsg && <p className="text-sm mt-2" style={{ color: '#22c55e', fontWeight: 500 }}>{resetMsg}</p>}
           </div>
-          {addError && <p className="text-danger text-sm mt-2">{addError}</p>}
-          {addSuccess && <p className="text-sm mt-2" style={{ color: '#22c55e', fontWeight: 500 }}>{addSuccess}</p>}
         </div>
 
-        {/* Quick Grant Reattempt card */}
-        <div className="card">
-          <h3 style={{ marginBottom: 'var(--space-2)' }}>Grant Reattempt Access</h3>
-          <p className="text-muted text-xs mb-3">
-            If a contestant accidentally closed the test or got locked out, enter their register number to clear their session and let them reattempt.
-          </p>
-          <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-            <input
-              className="form-input"
-              style={{ flex: '1', minWidth: '180px' }}
-              placeholder="Register Number to reset"
-              value={resetReg}
-              onChange={e => setResetReg(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleQuickReset()}
-            />
-            <button className="btn btn-secondary btn-sm" onClick={handleQuickReset}>
-              Grant Reattempt
-            </button>
+        {actionError && (
+          <div className="alert alert-danger mb-4">
+            {actionError}
           </div>
-          {resetError && <p className="text-danger text-sm mt-2">{resetError}</p>}
-          {resetMsg && <p className="text-sm mt-2" style={{ color: '#22c55e', fontWeight: 500 }}>{resetMsg}</p>}
-        </div>
+        )}
       </div>
 
-      {actionError && (
-        <div className="alert alert-danger mb-4">
-          {actionError}
-        </div>
-      )}
-
-      <div className="admin-table-wrap">
+      {/* Scrollable table: ONLY the names and list scroll */}
+      <div className="admin-table-wrap contestants-table-wrap">
         <table className="admin-table">
           <thead>
             <tr>
@@ -403,7 +411,7 @@ function ContestantsView({ data, onToggle, onRefresh }: { data: any; onToggle: a
           </tbody>
         </table>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -422,7 +430,7 @@ function AttemptsView({ data, onRefresh }: { data: any; onRefresh?: () => void }
   };
 
   return (
-    <div className="admin-table-wrap">
+    <div className="admin-table-wrap admin-scrollable-table">
       <table className="admin-table">
         <thead>
           <tr>
@@ -472,7 +480,7 @@ function AttemptsView({ data, onRefresh }: { data: any; onRefresh?: () => void }
 
 function LeaderboardView({ data }: { data: any }) {
   return (
-    <div className="admin-table-wrap">
+    <div className="admin-table-wrap admin-scrollable-table">
       <table className="admin-table">
         <thead>
           <tr>
@@ -510,7 +518,7 @@ function LeaderboardView({ data }: { data: any }) {
 
 function ViolationsView({ data }: { data: any }) {
   return (
-    <div className="admin-table-wrap">
+    <div className="admin-table-wrap admin-scrollable-table">
       <table className="admin-table">
         <thead>
           <tr>
@@ -542,7 +550,7 @@ function ViolationsView({ data }: { data: any }) {
 
 function ResultsView({ data }: { data: any }) {
   return (
-    <div className="admin-table-wrap">
+    <div className="admin-table-wrap admin-scrollable-table">
       <table className="admin-table">
         <thead>
           <tr>
