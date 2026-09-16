@@ -1298,3 +1298,33 @@ a:hover {
     margin-top: 4rem;
   }
 }
+
+/* ============================================================
+   ANTI-EXTENSION SHIELD — Suppress AI extension overlays/buttons
+   ============================================================ */
+
+#monica-app,
+[id*="monica"],
+[class*="monica"],
+[data-monica],
+monica-root,
+monica-quick-action,
+#sider-app,
+[id*="sider"],
+[class*="sider-"],
+#merlin-app,
+[id*="merlin"],
+[class*="merlin-"],
+#harpa-app,
+#chathub-app {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
+}
+

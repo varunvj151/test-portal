@@ -244,9 +244,20 @@ export default function ContestPage() {
           return;
         }
 
-        // Show warning for violation types
-        const violationTypes = ['TAB_SWITCH', 'FULLSCREEN_EXIT', 'PRINTSCREEN_ATTEMPT'];
-        if (violationTypes.includes(eventType) && !data.auto_submitted) {
+        // Show warning for violation and security event types
+        const warningTypes = [
+          'TAB_SWITCH',
+          'FULLSCREEN_EXIT',
+          'PRINTSCREEN_ATTEMPT',
+          'COPY_ATTEMPT',
+          'CUT_ATTEMPT',
+          'PASTE_ATTEMPT',
+          'AI_SHORTCUT_ATTEMPT',
+          'DEVTOOLS_SHORTCUT',
+          'PRINT_ATTEMPT',
+          'CONTEXT_MENU_ATTEMPT',
+        ];
+        if (warningTypes.includes(eventType) && !data.auto_submitted) {
           showSecurityWarning(newCount, eventType);
         }
       } catch {
@@ -256,16 +267,31 @@ export default function ContestPage() {
     [attemptId, currentIndex, questions, violationCount]
   );
 
+  const wipeClipboard = useCallback(() => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText('').catch(() => {});
+      }
+    } catch {}
+  }, []);
+
   const showSecurityWarning = (count: number, type: string) => {
     let message = 'A security violation was detected.';
     if (type === 'TAB_SWITCH') message = 'You left the contest window.';
     if (type === 'FULLSCREEN_EXIT') message = 'You exited fullscreen mode.';
     if (type === 'PRINTSCREEN_ATTEMPT') message = 'A screenshot shortcut was detected.';
+    if (type === 'COPY_ATTEMPT') message = 'Copying code or questions is strictly prohibited.';
+    if (type === 'CUT_ATTEMPT') message = 'Cutting code is strictly prohibited.';
+    if (type === 'PASTE_ATTEMPT') message = 'Pasting code or text is strictly prohibited.';
+    if (type === 'AI_SHORTCUT_ATTEMPT') message = 'AI extensions and shortcuts are strictly prohibited.';
+    if (type === 'DEVTOOLS_SHORTCUT') message = 'Developer tools shortcut detected.';
+    if (type === 'PRINT_ATTEMPT') message = 'Printing is not allowed.';
+    if (type === 'CONTEXT_MENU_ATTEMPT') message = 'Right-click context menu is disabled.';
 
     setSecurityWarning({ count, message });
 
     if (securityWarningTimer.current) clearTimeout(securityWarningTimer.current);
-    securityWarningTimer.current = setTimeout(() => setSecurityWarning(null), 6000);
+    securityWarningTimer.current = setTimeout(() => setSecurityWarning(null), 5000);
   };
 
   // Tab visibility
@@ -326,97 +352,277 @@ export default function ContestPage() {
     };
   }, [reportSecurityEvent]);
 
-  // Keyboard shortcuts monitoring
+  // Comprehensive keyboard shortcut monitoring & blocking
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isSubmitted.current) return;
 
-      // Block print
-      if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+      const key = e.key;
+      const lowerKey = key.toLowerCase();
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+
+      // 1. Block Modern Windows/Linux/Mac Copy: Ctrl + C / Cmd + C
+      // 2. Block Linux Terminal Copy: Ctrl + Shift + C
+      if (isCtrlOrCmd && lowerKey === 'c') {
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation();
+        wipeClipboard();
+        reportSecurityEvent('COPY_ATTEMPT', { shortcut: e.shiftKey ? 'Ctrl+Shift+C' : 'Ctrl+C' });
+        return;
+      }
+
+      // 3. Block Classic / IBM Legacy Copy: Ctrl + Insert
+      if (isCtrlOrCmd && (key === 'Insert' || e.keyCode === 45)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        wipeClipboard();
+        reportSecurityEvent('COPY_ATTEMPT', { shortcut: 'Ctrl+Insert' });
+        return;
+      }
+
+      // 4. Block Modern Cut: Ctrl + X / Cmd + X
+      if (isCtrlOrCmd && lowerKey === 'x') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        wipeClipboard();
+        reportSecurityEvent('CUT_ATTEMPT', { shortcut: 'Ctrl+X' });
+        return;
+      }
+
+      // 5. Block Classic / IBM Legacy Cut: Shift + Delete
+      if (e.shiftKey && (key === 'Delete' || e.keyCode === 46)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        wipeClipboard();
+        reportSecurityEvent('CUT_ATTEMPT', { shortcut: 'Shift+Delete' });
+        return;
+      }
+
+      // 6. Block Modern Paste: Ctrl + V / Cmd + V
+      // 7. Block Linux / Plain Text Paste: Ctrl + Shift + V / Cmd + Opt + Shift + V
+      if (isCtrlOrCmd && lowerKey === 'v') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        reportSecurityEvent('PASTE_ATTEMPT', { shortcut: e.shiftKey ? 'Ctrl+Shift+V' : 'Ctrl+V' });
+        return;
+      }
+
+      // 8. Block Classic / IBM Legacy Paste: Shift + Insert
+      if (e.shiftKey && (key === 'Insert' || e.keyCode === 45)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        reportSecurityEvent('PASTE_ATTEMPT', { shortcut: 'Shift+Insert' });
+        return;
+      }
+
+      // 9. Block Windows Key + V (Clipboard History)
+      if ((e.metaKey || key === 'Meta' || key === 'OS') && lowerKey === 'v') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        wipeClipboard();
+        reportSecurityEvent('PASTE_ATTEMPT', { shortcut: 'Win+V' });
+        return;
+      }
+
+      // 10. Block AI Assistant Extensions:
+      // - Monica AI: Ctrl + J, Cmd + J, Alt + J
+      // - Merlin / Sider: Ctrl + M, Cmd + M, Alt + M
+      if ((isCtrlOrCmd && lowerKey === 'j') || (e.altKey && lowerKey === 'j')) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        reportSecurityEvent('AI_SHORTCUT_ATTEMPT', { shortcut: e.altKey ? 'Alt+J' : 'Ctrl+J' });
+        return;
+      }
+      if ((isCtrlOrCmd && lowerKey === 'm') || (e.altKey && lowerKey === 'm')) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        reportSecurityEvent('AI_SHORTCUT_ATTEMPT', { shortcut: e.altKey ? 'Alt+M' : 'Ctrl+M' });
+        return;
+      }
+
+      // 11. Block Print: Ctrl + P / Cmd + P
+      if (isCtrlOrCmd && lowerKey === 'p') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         reportSecurityEvent('PRINT_ATTEMPT', { key: 'Ctrl+P' });
         return;
       }
 
-      // Block DevTools shortcuts
-      if (e.key === 'F12') {
+      // 12. Block DevTools shortcuts: F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C, Ctrl+U
+      if (key === 'F12') {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         reportSecurityEvent('DEVTOOLS_SHORTCUT', { key: 'F12' });
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['I', 'J', 'C'].includes(e.key)) {
+      if (isCtrlOrCmd && e.shiftKey && ['i', 'j', 'c'].includes(lowerKey)) {
         e.preventDefault();
-        reportSecurityEvent('DEVTOOLS_SHORTCUT', { key: `Ctrl+Shift+${e.key}` });
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        reportSecurityEvent('DEVTOOLS_SHORTCUT', { key: `Ctrl+Shift+${key.toUpperCase()}` });
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'u') {
+      if (isCtrlOrCmd && lowerKey === 'u') {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         reportSecurityEvent('DEVTOOLS_SHORTCUT', { key: 'Ctrl+U' });
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      if (isCtrlOrCmd && lowerKey === 's') {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         return;
       }
 
-      // PrintScreen detection (browser may not fully block OS-level)
-      if (e.key === 'PrintScreen') {
+      // 13. PrintScreen detection
+      if (key === 'PrintScreen') {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         reportSecurityEvent('PRINTSCREEN_ATTEMPT', { key: 'PrintScreen' });
       }
     };
 
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [reportSecurityEvent]);
+  }, [reportSecurityEvent, wipeClipboard]);
 
-  // Block copy/cut/paste/contextmenu/drag OUTSIDE the editor
+  // Block copy/cut/paste/contextmenu/drag events everywhere (including editor)
   useEffect(() => {
-    const isInsideEditor = (target: EventTarget | null) => {
-      if (!target) return false;
-      const el = target as Element;
-      return (
-        el.closest('.monaco-editor') !== null ||
-        el.closest('[class*="monaco"]') !== null ||
-        el.closest('[role="textbox"]') !== null
-      );
-    };
-
-    const blockEvent = (e: Event) => {
+    const handleCopyCut = (e: ClipboardEvent) => {
       if (isSubmitted.current) return;
-      if (isInsideEditor(e.target)) return;
       e.preventDefault();
       e.stopPropagation();
-      const type = e.type.toUpperCase() + '_ATTEMPT';
-      if (['COPY_ATTEMPT', 'CUT_ATTEMPT', 'PASTE_ATTEMPT'].includes(type)) {
-        reportSecurityEvent(type);
+      e.stopImmediatePropagation();
+      if (e.clipboardData) {
+        e.clipboardData.setData('text/plain', '');
       }
-      if (e.type === 'contextmenu') {
-        reportSecurityEvent('CONTEXT_MENU_ATTEMPT');
-      }
+      wipeClipboard();
+      reportSecurityEvent(e.type === 'cut' ? 'CUT_ATTEMPT' : 'COPY_ATTEMPT');
     };
 
-    const preventSelectStart = (e: Event) => {
+    const handlePaste = (e: ClipboardEvent) => {
       if (isSubmitted.current) return;
-      if (isInsideEditor(e.target)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      reportSecurityEvent('PASTE_ATTEMPT');
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      if (isSubmitted.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      reportSecurityEvent('CONTEXT_MENU_ATTEMPT');
+    };
+
+    const handleDragDrop = (e: DragEvent) => {
+      if (isSubmitted.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const handleSelectStart = (e: Event) => {
+      if (isSubmitted.current) return;
+      // Allow selection inside Monaco Editor so students can highlight their code to edit/backspace
+      const el = e.target as Element | null;
+      if (el && (el.closest('.monaco-editor') || el.closest('[class*="monaco"]'))) {
+        return;
+      }
+      // Outside the editor, prevent text selection completely
       e.preventDefault();
     };
 
-    document.addEventListener('copy', blockEvent, true);
-    document.addEventListener('cut', blockEvent, true);
-    document.addEventListener('paste', blockEvent, true);
-    document.addEventListener('contextmenu', blockEvent, true);
-    document.addEventListener('dragstart', blockEvent, true);
-    document.addEventListener('selectstart', preventSelectStart, true);
+    document.addEventListener('copy', handleCopyCut, true);
+    document.addEventListener('cut', handleCopyCut, true);
+    document.addEventListener('paste', handlePaste, true);
+    document.addEventListener('beforecopy', handleCopyCut as any, true);
+    document.addEventListener('beforecut', handleCopyCut as any, true);
+    document.addEventListener('beforepaste', handlePaste as any, true);
+    document.addEventListener('contextmenu', handleContextMenu, true);
+    document.addEventListener('dragstart', handleDragDrop, true);
+    document.addEventListener('dragover', handleDragDrop, true);
+    document.addEventListener('drop', handleDragDrop, true);
+    document.addEventListener('selectstart', handleSelectStart, true);
 
     return () => {
-      document.removeEventListener('copy', blockEvent, true);
-      document.removeEventListener('cut', blockEvent, true);
-      document.removeEventListener('paste', blockEvent, true);
-      document.removeEventListener('contextmenu', blockEvent, true);
-      document.removeEventListener('dragstart', blockEvent, true);
-      document.removeEventListener('selectstart', preventSelectStart, true);
+      document.removeEventListener('copy', handleCopyCut, true);
+      document.removeEventListener('cut', handleCopyCut, true);
+      document.removeEventListener('paste', handlePaste, true);
+      document.removeEventListener('beforecopy', handleCopyCut as any, true);
+      document.removeEventListener('beforecut', handleCopyCut as any, true);
+      document.removeEventListener('beforepaste', handlePaste as any, true);
+      document.removeEventListener('contextmenu', handleContextMenu, true);
+      document.removeEventListener('dragstart', handleDragDrop, true);
+      document.removeEventListener('dragover', handleDragDrop, true);
+      document.removeEventListener('drop', handleDragDrop, true);
+      document.removeEventListener('selectstart', handleSelectStart, true);
+    };
+  }, [reportSecurityEvent, wipeClipboard]);
+
+  // Anti-Extension Shield: Detect and remove injected AI extension elements
+  useEffect(() => {
+    const AI_EXTENSION_SELECTORS = [
+      'monica',
+      'sider',
+      'merlin',
+      'harpa',
+      'chathub',
+      'ai-sidebar',
+      'ai-copilot',
+    ];
+
+    const checkAndPurgeNode = (node: Node) => {
+      if (!(node instanceof HTMLElement)) return;
+
+      const tag = node.tagName.toLowerCase();
+      const id = (node.id || '').toLowerCase();
+      const cls = (node.className && typeof node.className === 'string' ? node.className : '').toLowerCase();
+
+      const isAIExtension = AI_EXTENSION_SELECTORS.some(
+        name => tag.includes(name) || id.includes(name) || cls.includes(name)
+      );
+
+      if (isAIExtension) {
+        try {
+          node.remove();
+        } catch {
+          node.style.display = 'none';
+          node.style.visibility = 'hidden';
+          node.style.pointerEvents = 'none';
+        }
+        reportSecurityEvent('AI_SHORTCUT_ATTEMPT', { detail: `Extension element blocked: ${id || tag}` });
+      }
+    };
+
+    // Scan initial DOM
+    document.querySelectorAll('*').forEach(el => checkAndPurgeNode(el));
+
+    const observer = new MutationObserver((mutations) => {
+      if (isSubmitted.current) return;
+      for (const mutation of mutations) {
+        mutation.addedNodes.forEach(node => checkAndPurgeNode(node));
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      observer.disconnect();
     };
   }, [reportSecurityEvent]);
 
@@ -750,6 +956,39 @@ export default function ContestPage() {
                   language={MONACO_LANGUAGE[currentQ.language] || 'c'}
                   value={codes[currentQ.id] ?? ''}
                   onChange={handleCodeChange}
+                  onMount={(editor, monaco) => {
+                    // Override Monaco internal clipboard & AI commands
+                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
+                      wipeClipboard();
+                      reportSecurityEvent('COPY_ATTEMPT');
+                    });
+                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
+                      wipeClipboard();
+                      reportSecurityEvent('CUT_ATTEMPT');
+                    });
+                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+                      reportSecurityEvent('PASTE_ATTEMPT');
+                    });
+                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyC, () => {
+                      wipeClipboard();
+                      reportSecurityEvent('COPY_ATTEMPT');
+                    });
+                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyV, () => {
+                      reportSecurityEvent('PASTE_ATTEMPT');
+                    });
+                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ, () => {
+                      reportSecurityEvent('AI_SHORTCUT_ATTEMPT', { key: 'Ctrl+J' });
+                    });
+                    editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.KeyJ, () => {
+                      reportSecurityEvent('AI_SHORTCUT_ATTEMPT', { key: 'Alt+J' });
+                    });
+                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyM, () => {
+                      reportSecurityEvent('AI_SHORTCUT_ATTEMPT', { key: 'Ctrl+M' });
+                    });
+                    editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.KeyM, () => {
+                      reportSecurityEvent('AI_SHORTCUT_ATTEMPT', { key: 'Alt+M' });
+                    });
+                  }}
                   options={{
                     fontSize: 14,
                     minimap: { enabled: false },
