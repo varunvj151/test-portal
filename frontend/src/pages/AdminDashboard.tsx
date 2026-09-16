@@ -344,6 +344,7 @@ function ContestantsView({ data, onToggle, onRefresh }: { data: any; onToggle: a
         <table className="admin-table">
           <thead>
             <tr>
+              <th style={{ width: '60px', textAlign: 'center' }}>S.No</th>
               <th>Reg. Number</th>
               <th>Name</th>
               <th>Attempt Status</th>
@@ -355,8 +356,9 @@ function ContestantsView({ data, onToggle, onRefresh }: { data: any; onToggle: a
             </tr>
           </thead>
           <tbody>
-            {(data.contestants || []).map((c: any) => (
+            {(data.contestants || []).map((c: any, index: number) => (
               <tr key={c.id}>
+                <td style={{ textAlign: 'center', color: 'var(--color-muted)', fontWeight: 600 }}>{index + 1}</td>
                 <td style={{ fontWeight: 600 }}>{c.registration_number}</td>
                 <td>{c.name}</td>
                 <td>{c.attempt_status ? <StatusBadge status={c.attempt_status} /> : <span className="badge badge-neutral">No Attempt</span>}</td>
@@ -406,7 +408,7 @@ function ContestantsView({ data, onToggle, onRefresh }: { data: any; onToggle: a
               </tr>
             ))}
             {(data.contestants || []).length === 0 && (
-              <tr><td colSpan={8} className="text-center text-muted" style={{ padding: 'var(--space-8)' }}>No contestants registered.</td></tr>
+              <tr><td colSpan={9} className="text-center text-muted" style={{ padding: 'var(--space-8)' }}>No contestants registered.</td></tr>
             )}
           </tbody>
         </table>
