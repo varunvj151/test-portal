@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loader } from '@monaco-editor/react';
+import { contestApi } from '../services/api';
 
 const RULES = [
   'Contest duration is 60 minutes.',
@@ -37,13 +38,23 @@ export default function RulesPage() {
     }
     setAttemptId(id);
 
+    // Guard: If attempt is already in progress, redirect straight to contest
+    contestApi.getAttempt().then(res => {
+      const att = res.data?.attempt;
+      if (att && att.status === 'IN_PROGRESS') {
+        navigate('/contest', { replace: true });
+      } else if (att && (att.status === 'SUBMITTED' || att.status === 'AUTO_SUBMITTED')) {
+        navigate('/home', { replace: true });
+      }
+    }).catch(() => {});
+
     // Warm up and prefetch Monaco Editor assets from CDN in background so contest page opens instantly
     loader.init().catch(() => {});
   }, []);
 
   const handleContinue = () => {
     if (!agreed) return;
-    navigate('/language');
+    navigate('/language', { replace: true });
   };
 
   return (

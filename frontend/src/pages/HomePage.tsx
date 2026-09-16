@@ -45,7 +45,15 @@ export default function HomePage() {
       ]);
       setContestant(meResp.data.contestant);
       setContest(contestResp.data.contest);
-      setAttempt(contestResp.data.attempt);
+      const att = contestResp.data.attempt;
+      setAttempt(att);
+
+      // If attempt is already in progress, automatically resume contest
+      if (att && att.status === 'IN_PROGRESS') {
+        sessionStorage.setItem('attempt_id', att.id);
+        navigate('/contest', { replace: true });
+        return;
+      }
     } catch (err: any) {
       if (err.message.includes('401') || err.message.includes('Authentication')) {
         navigate('/login', { replace: true });
@@ -67,13 +75,13 @@ export default function HomePage() {
       // If in progress, go directly to contest
       if (newAttempt.status === 'IN_PROGRESS') {
         sessionStorage.setItem('attempt_id', newAttempt.id);
-        navigate('/contest');
+        navigate('/contest', { replace: true });
         return;
       }
 
       // Store attempt id for next steps
       sessionStorage.setItem('attempt_id', newAttempt.id);
-      navigate('/rules');
+      navigate('/rules', { replace: true });
     } catch (err: any) {
       if (err.message.includes('already completed')) {
         loadData();
@@ -223,7 +231,7 @@ export default function HomePage() {
                 className="btn btn-primary btn-lg btn-full"
                 onClick={() => {
                   sessionStorage.setItem('attempt_id', attempt!.id);
-                  navigate('/contest');
+                  navigate('/contest', { replace: true });
                 }}
               >
                 Continue Contest

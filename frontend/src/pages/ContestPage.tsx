@@ -118,6 +118,34 @@ export default function ContestPage() {
   // Initialize
   // ============================================================
 
+  // Prevent browser back button / swipe back navigation during contest
+  useEffect(() => {
+    // Push state so back navigation is trapped on the contest page
+    window.history.pushState(null, '', window.location.href);
+
+    const handlePopState = () => {
+      if (!isSubmitted.current) {
+        window.history.pushState(null, '', window.location.href);
+      }
+    };
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!isSubmitted.current) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
   useEffect(() => {
     const id = sessionStorage.getItem('attempt_id');
     if (!id) {

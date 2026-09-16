@@ -24,6 +24,16 @@ export default function LanguageSelectionPage() {
     }
     setAttemptId(id);
 
+    // Guard: If attempt is already in progress or language is already set, send straight to contest
+    contestApi.getAttempt().then(res => {
+      const att = res.data?.attempt;
+      if (att && (att.status === 'IN_PROGRESS' || att.language)) {
+        navigate('/contest', { replace: true });
+      } else if (att && (att.status === 'SUBMITTED' || att.status === 'AUTO_SUBMITTED')) {
+        navigate('/home', { replace: true });
+      }
+    }).catch(() => {});
+
     // Warm up and prefetch Monaco Editor in background so contest page opens instantly
     loader.init().catch(() => {});
   }, []);
